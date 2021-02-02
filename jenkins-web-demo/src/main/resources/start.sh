@@ -15,3 +15,4 @@ if [[ -z $pid ]]; then
     echo "${Package_name} started"
 else
     echo "${Package_name} is already running"
+fi

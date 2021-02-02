@@ -1,0 +1,194 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Parameters": {
+    "Location": {
+      "Description": "Specify shorthand name for IDC city.",
+      "Type": "String",
+    },
+    "VPCCIDR": {
+      "Description": " The IP address range for VPC CidrBlock.",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "0.0.0.0/0",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+    "Subnet01CIDR": {
+      "Description": " The IP address range for subnet01 CidrBlock.",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "0.0.0.0/0",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+    "Subnet02CIDR": {
+      "Description": " The IP address range for subnet02 CidrBlock.",
+      "Type": "String",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "0.0.0.0/0",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    }
+  },
+    "Resources": {
+        "VPC": {
+            "Type": "AWS::EC2::VPC",
+            "DeletionPolicy" : "Retain",
+            "Properties": {
+                "CidrBlock": { "Ref": "VPCCIDR" },
+                "EnableDnsHostnames": "true",
+                "EnableDnsSupport": "true",
+                "Tags": [ {
+                    "Key": "Name",
+                    "Value": { "Fn::Join" : [ "", [ "vpc-", { "Ref" : "Location" } ] ] }
+                } ]
+            }
+        },
+        "IternetGW": {
+            "Type": "AWS::EC2::InternetGateway",
+            "DeletionPolicy" : "Retain",
+            "Properties": {
+                "Tags": [ {
+                    "Key": "Name",
+                    "Value": { "Fn::Join" : [ "", [ "igw-", { "Ref" : "Location" } ] ] }
+                } ]
+            }
+        },
+        "igwAttachVPC": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "DeletionPolicy" : "Retain",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "InternetGatewayId": {
+                    "Ref": "IternetGW"
+                }
+            }
+        },
+        "subnet01": {
+            "Type": "AWS::EC2::Subnet",
+            "DeletionPolicy" : "Retain",
+            "Properties": {
+                "CidrBlock": { "Ref": "Subnet01CIDR" },
+                "AvailabilityZone": {
+                    "Fn::Select": [ "0", { "Fn::GetAZs": { "Ref": "AWS::Region" } } ]
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "MapPublicIpOnLaunch" : "true",
+                "Tags": [ { "Key": "Name", "Value": { "Fn::Join" : [ "", [ "subnet01-", { "Ref" : "Location" } ] ] } }, { "Key": "kubernetes.io/role/internal-elb", "Value": "1" }, { "Key": "kubernetes.io/role/elb", "Value": "1" } ]
+            }
+        },
+        "subnet02": {
+            "Type": "AWS::EC2::Subnet",
+            "DeletionPolicy" : "Retain",
+            "Properties": {
+                "CidrBlock": { "Ref": "Subnet02CIDR" },
+                "AvailabilityZone": {
+                    "Fn::Select": [ "1", { "Fn::GetAZs": { "Ref": "AWS::Region" } } ]
+                },
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "MapPublicIpOnLaunch" : "true",
+                "Tags": [ { "Key": "Name", "Value": { "Fn::Join" : [ "", [ "subnet02-", { "Ref" : "Location" } ] ] } }, { "Key": "kubernetes.io/role/internal-elb", "Value": "1" }, { "Key": "kubernetes.io/role/elb", "Value": "1" } ]
+            }
+        },
+        "routeTable": {
+          "Type": "AWS::EC2::RouteTable",
+          "DeletionPolicy" : "Retain",
+          "Properties": {
+            "VpcId": {
+              "Ref": "VPC"
+            },
+            "Tags": [ { "Key": "Name", "Value": { "Fn::Join" : [ "", [ "rt-", { "Ref" : "Location" } ] ] } } ]
+          }
+        },
+        "routeEntry": {
+            "Type": "AWS::EC2::Route",
+            "DeletionPolicy" : "Retain",
+            "DependsOn": "igwAttachVPC",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "routeTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "IternetGW"
+                }
+            }
+        },
+        "subnet01RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "DeletionPolicy" : "Retain",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "subnet01"
+                },
+                "RouteTableId": {
+                    "Ref": "routeTable"
+                }
+            }
+        },
+        "subnet02RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "DeletionPolicy" : "Retain",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "subnet02"
+                },
+                "RouteTableId": {
+                    "Ref": "routeTable"
+                }
+            }
+        },
+        "httpsg" : {
+          "Type" : "AWS::EC2::SecurityGroup",
+          "DeletionPolicy" : "Retain",
+          "Properties" : {
+             "GroupName" : "http",
+             "GroupDescription" : "allow http access from any where",
+             "VpcId" : { "Ref": "VPC" },
+             "SecurityGroupIngress" : [
+                 { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0" },
+                 { "IpProtocol" : "tcp", "FromPort" : "8080", "ToPort" : "8080", "CidrIp" : "0.0.0.0/0" },
+                 { "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0" }
+             ],
+             "Tags": [ { "Key": "Name", "Value": "http" } ]
+          }
+        },
+        "localallsg" : {
+          "Type" : "AWS::EC2::SecurityGroup",
+          "DeletionPolicy" : "Retain",
+          "Properties" : {
+             "GroupName" : "localall",
+             "GroupDescription" : "allow LAN all access",
+             "VpcId" : { "Ref": "VPC" },
+             "SecurityGroupIngress" : [
+                 { "IpProtocol" : "-1", "FromPort" : "-1", "ToPort" : "-1", "CidrIp" : "172.16.0.0/14" },
+                 { "IpProtocol" : "-1", "FromPort" : "-1", "ToPort" : "-1", "CidrIp" : "192.168.0.0/16" },
+                 { "IpProtocol" : "-1", "FromPort" : "-1", "ToPort" : "-1", "CidrIp" : { "Ref": "VPCCIDR" } }
+             ],
+             "Tags": [ { "Key": "Name", "Value": "localall" } ]
+          }
+        },
+        "companysg" : {
+          "Type" : "AWS::EC2::SecurityGroup",
+          "DeletionPolicy" : "Retain",
+          "Properties" : {
+             "GroupName" : "company-and-otheridc",
+             "GroupDescription" : "allow from company connect to local all",
+             "VpcId" : { "Ref": "VPC" },
+             "SecurityGroupIngress" : [
+                 { "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "182.48.113.19/28", "Description": "company-bj real publicIp " }
+             ],
+             "Tags": [ { "Key": "Name", "Value": "company-and-otheridc" } ]
+          }
+        }
+    }
+}

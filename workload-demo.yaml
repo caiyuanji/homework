@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins-web-demo
+  namespace: default
+  labels:
+    app: jenkins-web-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jenkins-web-demo
+  template:
+    metadata:
+      labels:
+        app: jenkins-web-demo
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: beta.kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64
+      containers:
+      - name: jenkins-web-demo
+        image: 893293361941/jenkins-web-demo:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-web-demo
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb-ip
+    #service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: LoadBalancer
+  selector:
+    app: jenkins-web-demo

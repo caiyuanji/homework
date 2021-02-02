@@ -1,0 +1,139 @@
+pipeline {
+    agent any
+    options {
+        timestamps()
+        skipDefaultCheckout()
+        disableConcurrentBuilds()
+        timeout(time: 1, unit: 'HOURS')
+    }
+    stages {
+        stage('set variables') {
+            steps {
+                script{
+                    println('set variable...')
+                    splitvalue = "========================================================================================================="
+                    dest_server = 'k8s-bastion'
+                    gitUrl = "https://github.com/caiyuanji/homework.git"
+                    NS = 'default'
+                    deploy_name = 'jenkins-web-demo'
+                    sub_path = "${deploy_name}"
+                    container_name = "${deploy_name}"
+                    image_name = "893293361941/prod-${deploy_name}"
+                    podnumber = 2
+                    img_version = sh returnStdout: true ,script: "date +%Y%m%d%H%M"
+                    img_version = img_version.trim()
+                }
+            }
+        }
+
+        stage('deployment') {
+            when { environment name: 'Actions', value: 'deploy' }
+            stages {
+                stage('preparing') {
+                    steps {
+                        script{
+                            println(splitvalue+'\nPreparing...')
+                            sh "mvn -v && java -version"
+                        }
+                    }
+                }
+                stage('pulling code') {
+                    steps {
+                        script{
+                            println(splitvalue+'\nPulling code....')
+                            deleteDir()
+                            git branch: 'master', url: "${gitUrl}"
+                        }
+                    }
+                }
+                stage('compiling') {
+                    steps {
+                        script{
+                            println(splitvalue+'\nCompiling ...')
+                            sh "cd ${sub_path} && mvn clean package -Pprod_jp -DskipTests -U -B -e sonar:sonar docker:build -DpushImage -DdockerImageTags=${img_version}"
+                            sh "docker rmi -f `docker images -q ${image_name}:latest`"
+                        }
+                    }
+                }
+                stage('publishing') {
+                    steps {
+                        script{
+                            println(splitvalue+'\nPublishing ...')
+                            sh "ansible '${dest_server}' -m shell -a 'kubectl -n ${NS} set image --record deployment/${deploy_name} ${container_name}=${image_name}:${img_version}' "
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('rollback') {
+            when { 
+                environment name: 'Actions', value: 'rollback' 
+            }
+            steps {
+                script{
+                    println(splitvalue+"\nRollbacking...")
+                    sh "ansible '${dest_server}' -m shell -a 'kubectl -n ${NS} rollout undo deployment/${deploy_name}'"
+                }
+            }
+        }
+        
+        stage('restart') {
+            when { environment name: 'Actions', value: 'restart' }
+            steps {
+                script{
+                    println(splitvalue+"\nRestartting...")
+                    sh "ansible ${dest_server} -m shell -a 'kubectl -n ${NS} scale deployment/${deploy_name} --replicas=0'"
+                    sh "sleep 5"
+                    sh "ansible ${dest_server} -m shell -a 'kubectl -n ${NS} scale deployment/${deploy_name} --replicas=${podnumber}'"
+                }
+            }
+        }
+        
+        stage('stop') {
+            when { environment name: 'Actions', value: 'stop' }
+            steps {
+                script{
+                    println(splitvalue+"\nStopping...")
+                    sh "ansible ${dest_server} -m shell -a 'kubectl -n ${NS} scale deployment/${deploy_name} --replicas=0'"
+                }
+            }
+        }
+        
+        stage('start') {
+            when { environment name: 'Actions', value: 'start' }
+            steps {
+                script{
+                    println(splitvalue+"\nStarting")
+                    sh "ansible ${dest_server} -m shell -a 'kubectl -n ${NS} scale deployment/${deploy_name} --replicas=${podnumber}'"
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                println("completed")  
+            }
+        }
+    
+        success {
+            script {
+                currentBuild.description += "\n 构建成功"
+            }
+        }
+    
+        failure {
+            script {
+                currentBuild.description += "\n 构建失败"
+            }
+        }
+    
+        aborted {
+            script {
+                currentBuild.description += "\n 构建取消"
+            }
+        }
+    }
+}
