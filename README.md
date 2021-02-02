@@ -17,3 +17,6 @@
 
 6 About Dockerfile
   To complete the Dockerfile topic, a example of Python flask web-hook is placed in the docker directory, where the image can be generated directly using the build.sh script.
+
+7 About create Jenkins in k8s
+  Due to time constraints, I have included a Jenkins Workload Manifests from our company's development environment in the 17-CICD directory for your reference.
