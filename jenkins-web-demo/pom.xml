@@ -55,7 +55,7 @@
             <id>prod_jp</id>
             <properties>
                 <env>prod_jp</env>
-                <image.url>893293361941.dkr.ecr.ap-northeast-1.amazonaws.com</image.url>
+                <image.url>893293361941</image.url>
             </properties>
         </profile>
     </profiles>
@@ -107,8 +107,8 @@
                 <artifactId>docker-maven-plugin</artifactId>
                 <version>1.2.0</version>
                 <configuration>
-                    <imageName>${image.url}/${env}-${project.name}:${project.version}</imageName>
-                    <baseImage>${image.url}/alpine-jdk11:latest</baseImage>
+                    <imageName>${image.url}/${project.name}:${project.version}</imageName>
+                    <baseImage>${image.url}/alpine-jdk8:latest</baseImage>
                     <workdir>/tmp</workdir>
                     <entryPoint>["/bin/sh", "-x", "/opt/start.sh"]</entryPoint>
                     <forceTags>true</forceTags>
