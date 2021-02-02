@@ -14,3 +14,6 @@
 5 About Jenkins job
   When I created the SpringBoot project, I referenced Docker's plug-in in the pop.xml file and specified the underlying image. so I can complete the containerization of the APP by specifying docker:build parameter when compiling the project in mvn command.
   The jenkins-job-pipeline.txt file is part of the pipeline code for Jenkins Job.
+
+6 About Dockerfile
+  To complete the Dockerfile topic, a example of Python flask web-hook is placed in the docker directory, where the image can be generated directly using the build.sh script.
